@@ -4,6 +4,8 @@ Write a prompt now and send it later to a Claude Code, OpenCode, Codex, Gemini C
 
 Each job runs headless in a transient systemd user timer, so it fires while the screen is locked and while the panel is closed. Auto Pilot shows the exact command before it arms anything, and afterwards it tells you what happened. Cursor Agent and Pi run in Plan only (see [Cursor Agent and Pi](#cursor-agent-and-pi)).
 
+![Auto Pilot panel on Compose](preview.png)
+
 ## What it does
 
 - **Compose.** Write a prompt, pick an agent, one of its sessions (resume it, fork it or start a new one) and a model, choose the permission level and the moment, and arm it. The moment can be now, in a few minutes or hours, a clock time up to 8 days ahead, or the next limit reset. **Allow paid usage** stays off unless you tick it.
@@ -11,6 +13,12 @@ Each job runs headless in a transient systemd user timer, so it fires while the 
 - **Queue.** Armed jobs, grouped by day on a timeline with the limit resets marked. Move, swap, shift or disarm them.
 - **History.** How each run ended (done, failed, limit hit, skipped, missed), with the last lines of output and a ready-to-paste resume command. A day timeline shows that day's runs, resets and armed jobs.
 - **Bar and notifications.** The bar icon says what needs you: a problem, a running job, the countdown to the next job, or what finished. A notification tells you when a job finishes, fails or has to wait.
+
+![Compose](docs/compose.png)
+
+![Queue](docs/queue.png)
+
+![History](docs/history.png)
 
 ## Install
 

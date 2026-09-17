@@ -341,8 +341,8 @@ lib_case drafts '
                                        { codex: { enabled: false }, claude: { enabled: true }, opencode: { enabled: true } })
       eq(d1, { harness: "claude", target: { mode: "new", sessionId: null, cwd: null, allowNonGit: false, sessionPath: null }, level: "unattended",
                limits: {}, model: null, allowPaid: false, provider: null, trigger: { kind: "now" }, prompt: "" })
-      eq(Model.draftFromSettings({ defaultHarness: "gemini", defaultLevel: "full" }, {}).harness, "gemini")
-      eq(Model.draftFromSettings({ defaultHarness: "gemini", defaultLevel: "full" }, {}).level, "plan")
+      eq(Model.draftFromSettings({ defaultHarness: "gemini", defaultLevel: "turbo" }, {}).harness, "gemini")
+      eq(Model.draftFromSettings({ defaultHarness: "gemini", defaultLevel: "turbo" }, {}).level, "plan")
       eq(Model.draftFromSettings(null, null).harness, "claude")
       eq(Model.draftFromSettings({ defaultHarness: "pi" }, {}).harness, "pi")
       eq(Model.draftFromSettings({ defaultHarness: "cursor" }, {}).harness, "cursor")
