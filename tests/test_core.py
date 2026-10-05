@@ -1548,7 +1548,7 @@ class SchedulingTests(Sandbox):
 
     def test_list_has_no_prompt_text(self):
         # No label is given and the canary opens the prompt: a label taken from the prompt would carry it
-        # into list output and the notification body (busctl argv). The generated label is metadata only.
+        # into list output and the notification body. The generated label is metadata only.
         canary = "CANARY-" + secrets.token_hex(12)
         prompt = canary + " check the nightly build.\nThen summarize it."
         created = self.create(prompt=prompt)

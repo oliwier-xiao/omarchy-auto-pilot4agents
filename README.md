@@ -218,7 +218,7 @@ Both run in Plan only.
 - **Provider and model.** Every Pi job needs both. Pick them in the model picker.
 - **Sign-in check.** `pi auth check` confirms the sign-in for that provider before arming and again before firing.
 - **Slash prompts.** A prompt that starts with `/` is refused, because Pi reads it as a command. Start it with a word.
-- **Sessions.** Where to run lists the Pi sessions of the chosen folder, and a job resumes or forks the session file by its full path.
+- **Sessions.** Where to run lists the Pi sessions of the chosen folder. A job resumes or forks one by its full id, with the folder that holds its file in `PI_CODING_AGENT_SESSION_DIR`.
 
 ## Keyboard
 
