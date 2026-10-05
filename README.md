@@ -4,9 +4,25 @@ Write a prompt now and send it later to a Claude Code, OpenCode, Codex, Gemini C
 
 Each job runs headless in a transient systemd user timer, so it fires while the screen is locked and while the panel is closed. Auto Pilot shows the exact command before it arms anything, and afterwards it tells you what happened. Cursor Agent and Pi run in Plan only (see [Cursor Agent and Pi](#cursor-agent-and-pi)).
 
-| Install | Update | Remove |
-|---|---|---|
-| `omarchy plugin add https://github.com/oliwier-xiao/omarchy-auto-pilot4agents.git --enable` | `omarchy plugin update oliwier.auto-pilot4agents` | `omarchy plugin remove oliwier.auto-pilot4agents`, after [cancelling jobs](#removal) |
+**Install**
+
+```
+omarchy plugin add https://github.com/oliwier-xiao/omarchy-auto-pilot4agents.git --enable
+```
+
+**Update**
+
+```
+omarchy plugin update oliwier.auto-pilot4agents
+```
+
+**Remove**
+
+Cancel its jobs first, see [Removal](#removal).
+
+```
+omarchy plugin remove oliwier.auto-pilot4agents
+```
 
 ![Auto Pilot panel on Compose](preview.png)
 
