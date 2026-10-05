@@ -176,7 +176,7 @@ def _pi_default_dir(cwd):
 
 def _pi_id_unique(session_id, path):
     """True when path is the one session file in the store named after session_id."""
-    pattern = os.path.join(fsio.home(), consts.PI_SESSIONS_REL, "*", "*_" + session_id + ".jsonl")
+    pattern = os.path.join(glob.escape(fsio.home()), consts.PI_SESSIONS_REL, "*", "*_" + session_id + ".jsonl")
     try:
         found = [os.path.realpath(p) for p in glob.glob(pattern)]
     except OSError:

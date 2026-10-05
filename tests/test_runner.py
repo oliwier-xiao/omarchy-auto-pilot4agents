@@ -1804,6 +1804,27 @@ class V2HarnessTests(Sandbox):
             refused(make_job("pi", mode="resume", session=PI_UUID, session_path=bad), "invalid_session",
                     "target.sessionPath")
 
+    def test_pi_fork_found_by_id_needs_one_file_even_under_a_home_with_glob_characters(self):
+        # The working folder is reached through a link, so the source is not in the folder Pi uses
+        # for it and Pi finds it by id across the store: that id must name this one file.
+        home = os.path.join(self.tmp, "home[1]")
+        os.makedirs(home, mode=0o700)
+        os.environ["HOME"] = home
+        path = pi_path(PI_UUID, home=home, folder="--elsewhere--")
+        os.makedirs(os.path.dirname(path), mode=0o700)
+        open(path, "w").close()
+        job = make_job("pi", mode="fork", session=PI_UUID, session_path=path)
+        built = harness.build_command(job, exec_prefix=["/p"], run_dir="/s", gen=1)
+        self.assertEqual(built["argv"][-2:], ["--fork", PI_UUID])
+        self.assertEqual(built["env"]["PI_CODING_AGENT_SESSION_DIR"],
+                         home + "/.pi/agent/sessions/--home-u-proj--")
+        twin = pi_path(PI_UUID, home=home, folder="--other--")
+        os.makedirs(os.path.dirname(twin), mode=0o700)
+        open(twin, "w").close()
+        with self.assertRaises(ApError) as ctx:
+            harness.build_command(job, exec_prefix=["/p"], run_dir="/s", gen=1)
+        self.assertEqual((ctx.exception.code, ctx.exception.field), ("invalid_session", "target.sessionId"))
+
     def test_cursor_argv_forbidden_flags_absent(self):
         forbidden = {"-f", joined("--fo", "rce"), joined("--yo", "lo"), joined("--tru", "st"),
                      joined("--auto-", "review"), joined("--approve-", "mcps"), "--api-key", "--auth-token",

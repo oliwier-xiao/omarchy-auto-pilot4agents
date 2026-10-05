@@ -14,8 +14,11 @@ exception, because a notification is never worth failing a run over.
 
 import os
 import socket
+import string
 import struct
 import time
+
+from . import fsio
 
 _MAX_MESSAGE = 65536      # a Notify reply is a few dozen bytes; NameAcquired about a hundred
 _MAX_READ = 262144        # everything read before the reply, all messages together
@@ -154,7 +157,8 @@ def _parse_header(raw):
 
 
 def _bus_address():
-    """The session bus socket: DBUS_SESSION_BUS_ADDRESS, else $XDG_RUNTIME_DIR/bus."""
+    """The session bus socket: the first usable unix address in DBUS_SESSION_BUS_ADDRESS, else
+    $XDG_RUNTIME_DIR/bus when that is a runtime folder of ours that nobody else can enter."""
     address = os.environ.get("DBUS_SESSION_BUS_ADDRESS", "")
     if address and len(address) <= _ADDRESS_MAX and address.isprintable():
         for entry in address.split(";"):
@@ -162,13 +166,18 @@ def _bus_address():
             if transport != "unix":
                 continue
             values = dict(part.partition("=")[::2] for part in params.split(",") if "=" in part)
-            if values.get("path", "").startswith("/"):
-                return _unescape(values["path"])
-            if values.get("abstract"):
-                return "\0" + _unescape(values["abstract"])
+            try:
+                if values.get("path"):
+                    path = _unescape(values["path"])
+                    if path.startswith("/") and "\0" not in path:
+                        return path
+                elif values.get("abstract"):
+                    return "\0" + _unescape(values["abstract"])
+            except (ValueError, UnicodeError):
+                continue
     runtime = os.environ.get("XDG_RUNTIME_DIR", "")
-    if runtime.startswith("/") and len(runtime) <= _ADDRESS_MAX and runtime.isprintable():
-        return os.path.join(runtime, "bus")
+    if fsio.runtime_dir_valid(runtime):
+        return runtime + "/bus"
     return None
 
 
@@ -177,9 +186,10 @@ def _unescape(value):
     out, i = bytearray(), 0
     while i < len(value):
         if value[i] == "%":
-            if i + 3 > len(value):
-                raise ValueError("truncated escape")
-            out.append(int(value[i + 1:i + 3], 16))
+            pair = value[i + 1:i + 3]
+            if len(pair) != 2 or not all(c in string.hexdigits for c in pair):
+                raise ValueError("bad escape")
+            out.append(int(pair, 16))
             i += 3
         else:
             out += value[i].encode("utf-8")
@@ -190,7 +200,7 @@ def _unescape(value):
 def _recv_line(sock, deadline):
     buf = bytearray()
     while not buf.endswith(b"\r\n"):
-        if len(buf) > 512:
+        if len(buf) > 512 or time.monotonic() >= deadline:
             raise _Fail()
         sock.settimeout(max(0.01, deadline - time.monotonic()))
         chunk = sock.recv(1)
@@ -241,5 +251,5 @@ def notify(app_name, summary, body, timeout_ms, *, deadline_s=5.0):
                 buf += chunk
         finally:
             sock.close()
-    except (OSError, ValueError, UnicodeError, struct.error, _Fail):
+    except (OSError, ValueError, UnicodeError, IndexError, struct.error, _Fail):
         return False

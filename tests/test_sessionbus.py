@@ -4,7 +4,10 @@ A private bus listens on a socket in a temporary folder, and tests/support/mockb
 notification server on it. Skipped where dbus-daemon is not installed.
 """
 import os
+import re
 import shutil
+import socket
+import struct
 import subprocess
 import sys
 import tempfile
@@ -17,11 +20,17 @@ sys.path.insert(0, os.path.join(ROOT, "bin"))
 sys.path.insert(0, os.path.join(ROOT, "tests", "support"))
 sys.dont_write_bytecode = True
 
-from autopilot import sessionbus  # noqa: E402
+from autopilot import consts, sessionbus  # noqa: E402
 
 HAVE_BUS = os.access("/usr/bin/dbus-daemon", os.X_OK)
 if HAVE_BUS:
     import mockbus  # noqa: E402
+
+
+def _runtime_grammar(test, runtime):
+    """Let a temporary folder pass for /run/user/<uid> for the length of one test."""
+    test.addCleanup(setattr, consts, "XDG_RUNTIME_RE", consts.XDG_RUNTIME_RE)
+    consts.XDG_RUNTIME_RE = re.compile("^" + re.escape(runtime) + "$")
 
 
 @unittest.skipUnless(HAVE_BUS, "dbus-daemon is not installed")
@@ -78,6 +87,7 @@ class SessionBusTests(unittest.TestCase):
         os.environ.pop("DBUS_SESSION_BUS_ADDRESS")
         runtime = os.path.join(self.tmp, "run")
         os.mkdir(runtime, 0o700)
+        _runtime_grammar(self, runtime)
         os.symlink(self.sock, os.path.join(runtime, "bus"))
         os.environ["XDG_RUNTIME_DIR"] = runtime
         self.assertTrue(sessionbus.notify("Auto Pilot", "Done", "x", 6000))
@@ -89,6 +99,7 @@ class SessionBusTests(unittest.TestCase):
         os.environ["DBUS_SESSION_BUS_ADDRESS"] = "unix:path=" + escaped + ",guid=0123"
         self.assertTrue(sessionbus.notify("Auto Pilot", "Done", "x", 6000))
         os.environ["DBUS_SESSION_BUS_ADDRESS"] = "unix:path=/x%2"
+        os.environ.pop("XDG_RUNTIME_DIR", None)
         self.assertFalse(sessionbus.notify("Auto Pilot", "Done", "x", 6000))
 
     def test_a_text_with_a_nul_is_refused_before_anything_is_sent(self):
@@ -125,6 +136,99 @@ class SessionBusTests(unittest.TestCase):
         self.assertEqual(seen, [])
         self.assertEqual(len(server.calls), 20)
         self.assertIn(canary, server.calls[0][4])
+
+
+class HostilePeerTests(unittest.TestCase):
+    """A bus that misbehaves: each case is False, within the deadline, and never an exception."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        saved = {k: os.environ.get(k) for k in ("DBUS_SESSION_BUS_ADDRESS", "XDG_RUNTIME_DIR")}
+
+        def restore():
+            for key, value in saved.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+        self.addCleanup(restore)
+        os.environ.pop("XDG_RUNTIME_DIR", None)
+
+    def peer(self, script):
+        """A socket whose one connection script(conn) answers; the bus address points at it."""
+        path = os.path.join(self.tmp, "bus")
+        server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        server.bind(path)
+        server.listen(1)
+        self.addCleanup(server.close)
+
+        def run():
+            try:
+                conn, _ = server.accept()
+            except OSError:
+                return
+            with conn:
+                try:
+                    script(conn)
+                except OSError:
+                    pass
+        thread = threading.Thread(target=run, daemon=True)
+        thread.start()
+        self.addCleanup(thread.join, 5)
+        os.environ["DBUS_SESSION_BUS_ADDRESS"] = "unix:path=" + path
+
+    def test_an_answer_sent_a_byte_at_a_time_ends_at_the_deadline(self):
+        def trickle(conn):
+            conn.recv(256)
+            for _ in range(500):
+                conn.sendall(b"O")
+                time.sleep(0.009)
+        self.peer(trickle)
+        started = time.monotonic()
+        self.assertFalse(sessionbus.notify("a", "b", "c", 1, deadline_s=0.5))
+        self.assertLess(time.monotonic() - started, 1.5)
+
+    def test_a_reply_cut_inside_its_header_fields_is_false(self):
+        def cut(conn):
+            conn.recv(256)
+            conn.sendall(b"OK 0123456789abcdef0123456789abcdef\r\n")
+            conn.recv(4096)
+            # One byte of header fields: a field code and nothing after it.
+            conn.sendall(b"l\x02\x00\x01" + struct.pack("<III", 0, 1, 1) + b"\x05")
+            time.sleep(1)
+        self.peer(cut)
+        self.assertFalse(sessionbus.notify("a", "b", "c", 1, deadline_s=2))
+
+    def test_a_silent_bus_ends_at_the_deadline(self):
+        self.peer(lambda conn: time.sleep(2))
+        started = time.monotonic()
+        self.assertFalse(sessionbus.notify("a", "b", "c", 1, deadline_s=0.5))
+        self.assertLess(time.monotonic() - started, 1.5)
+
+    def test_an_unusable_address_gives_way_to_the_next(self):
+        cases = {
+            "unix:path=/x%zz;unix:path=/run/ok": "/run/ok",
+            "unix:path=/a%00b;unix:abstract=name": "\0name",
+            "unix:path=%2Frun%2Fbus": "/run/bus",
+            "tcp:host=localhost,port=1;unix:path=/run/two": "/run/two",
+            "unix:path=relative": None,
+        }
+        for address, expected in cases.items():
+            os.environ["DBUS_SESSION_BUS_ADDRESS"] = address
+            self.assertEqual(sessionbus._bus_address(), expected, address)
+
+    def test_the_runtime_folder_counts_only_when_it_is_private(self):
+        os.environ.pop("DBUS_SESSION_BUS_ADDRESS", None)
+        runtime = os.path.join(self.tmp, "run")
+        os.mkdir(runtime, 0o700)
+        os.chmod(runtime, 0o700)
+        os.environ["XDG_RUNTIME_DIR"] = runtime
+        self.assertIsNone(sessionbus._bus_address(), "not a runtime folder's name")
+        _runtime_grammar(self, runtime)
+        self.assertEqual(sessionbus._bus_address(), runtime + "/bus")
+        os.chmod(runtime, 0o755)
+        self.assertIsNone(sessionbus._bus_address(), "a runtime folder others can enter")
 
 
 if __name__ == "__main__":
