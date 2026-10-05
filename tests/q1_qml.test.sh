@@ -377,7 +377,7 @@ lib_case drafts '
       eq([l1.trigger, l1.allowPaid, l1.provider, l1.target.sessionPath], [{ kind: "now" }, false, null, null])
       eq(Edition.LEVEL_IDS, ["plan", "unattended"])
       eq(Object.keys(Edition.LEVEL_LABELS), ["plan", "unattended"])
-      eq(Edition.HARNESS_IDS, ["claude", "opencode", "codex", "gemini", "cursor", "pi"])'
+      eq(Edition.HARNESS_IDS, ["claude", "opencode", "codex", "cursor", "pi", "gemini"])'
 run_case Lib_drafts.qml "drafts from settings and stored jobs (allowPaid, provider, sessionPath; a legacy OpenCode Claude reset starts over at now); six agents; level enum"
 
 # ---------------------------------------------------------------- Tint
@@ -726,7 +726,8 @@ expected = {
     "settings-get": (7000, 16384, False, R), "settings-set": (9000, 16384, True, W), "copy-resume": (8000, 16384, False, W),
     "sessions": (13000, 921600, False, R), "usage": (8000, 131072, False, R), "agents": (35000, 65536, False, R),
     "models": (30000, 262144, False, R), "timeline": (9000, 262144, False, R),
-    "dirs": (8000, 262144, False, R), "workspace": (8000, 65536, False, W),
+    "dirs": (8000, 262144, False, R), "workspace": (8000, 65536, False, W), "folder": (8000, 65536, True, R),
+    "find-dirs": (9000, 131072, True, R),
 }
 bad = sorted(set(rows) ^ set(expected)) + sorted(k for k in rows if k in expected and rows[k] != expected[k])
 if bad:
