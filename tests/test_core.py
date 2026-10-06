@@ -756,8 +756,15 @@ class DispatcherTests(Sandbox):
                 self.assertLessEqual(actions, {"allow", "deny"}, key)
                 if "allow" in actions:
                     self.assertIn(key, edition.OPENCODE_READ_ONLY_TOOLS)
-            # No plugin loads: its hooks run inside OpenCode, outside every rule.
-            self.assertIn("--pure", lv["harness"]["opencode"]["argv"], lv["id"])
+            self.assertEqual(rules["read"]["mcp:*"], "deny", lv["id"])
+            # No plugin loads (its hooks run inside OpenCode, outside every rule), and the plugin's own
+            # agent runs, defined last with these same rules, so no agent your config sets up turns a
+            # tool back on.
+            entry = lv["harness"]["opencode"]
+            self.assertEqual(entry["argv"], ["--pure", "--agent", edition.OPENCODE_READ_ONLY_AGENT], lv["id"])
+            self.assertEqual(entry["env"]["OPENCODE_CONFIG_" + "CONTENT"],
+                             '{"agent":{"%s":{"mode":"primary","permission":%s}}}'
+                             % (edition.OPENCODE_READ_ONLY_AGENT, entry["env"]["OPENCODE_PERMISSION"]), lv["id"])
         with open(os.path.join(ROOT, "manifest.json")) as handle:
             manifest = json.load(handle)
         info = obj["edition"]
