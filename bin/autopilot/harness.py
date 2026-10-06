@@ -313,6 +313,12 @@ def _build(job, exec_prefix, run_dir, gen_text, preview=False):
             argv += ["--title", edition.SESSION_NAME_PREFIX + id8]
     elif harness == "codex":
         argv += ["exec"]
+        # Drop the execpolicy allow rules in ~/.codex/rules and in a trusted folder: a command that
+        # matches one otherwise runs outside the sandbox. The rules name no folder, so this flag
+        # does not put one on the command line. (A folder's own trust, which would load its
+        # .codex/config.toml, is keyed by path and cannot be pinned without naming the folder on
+        # the command line, which this plugin never does; -s still fixes the sandbox mode itself.)
+        argv += ["--ignore-rules"]
         slot = [len(argv), len(argv) + len(level_argv)]
         argv += level_argv
         argv += ["--json", "--color", "never", "-o", run_dir + "/" + job["id"] + "-g" + gen_text + ".last.txt"]
@@ -359,6 +365,9 @@ def _build(job, exec_prefix, run_dir, gen_text, preview=False):
         argv += ["--provider", provider, "--model", model]
         if mode == "new":
             argv += ["--session-id", sid, "--name", edition.SESSION_NAME_PREFIX + id8]
+            # Pin where the new session is filed, so a folder's own .pi/settings.json sessionDir
+            # cannot send the transcript, with the file contents it read, somewhere the repo chose.
+            pi_env["PI_CODING_AGENT_SESSION_DIR"] = _pi_default_dir(os.path.realpath(cwd))
         else:
             path = effective_session_path(job) if mode == "resume" else target.get("sessionPath")
             if not pi_session_path_ok(path):

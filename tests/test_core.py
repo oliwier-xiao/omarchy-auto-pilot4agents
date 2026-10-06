@@ -1921,6 +1921,9 @@ class V2CoreTests(Sandbox):
              trig(self.draft(harness="opencode", model="opencode/big-pickle"), kind="go_window_reset")),
             ("pi_slash_prompt", "prompt", self.pi_draft(prompt="/llama hello")),
             ("pi_slash_prompt", "prompt", self.pi_draft(prompt="  \n /help")),
+            # Pi's trim drops a leading byte-order mark, so one before the / must be caught too.
+            ("pi_slash_prompt", "prompt", self.pi_draft(prompt="﻿/llama")),
+            ("pi_slash_prompt", "prompt", self.pi_draft(prompt=" ﻿ /help")),
         ]
         for code, field, draft in table:
             expect(code, field, draft)

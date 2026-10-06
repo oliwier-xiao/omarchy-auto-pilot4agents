@@ -248,7 +248,8 @@ def _apply_verdict(sd, store, job, verdict, now):
 
 def _slash_prompt(prompt):
     try:
-        return prompt.decode("utf-8").lstrip().startswith("/")
+        # Pi's trim also drops a leading byte-order mark that str.lstrip() keeps.
+        return re.sub(r"^[\s﻿]+", "", prompt.decode("utf-8")).startswith("/")
     except UnicodeDecodeError:
         return True
 

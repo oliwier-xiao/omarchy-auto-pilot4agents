@@ -283,8 +283,9 @@ def validate_draft(draft, *, require_prompt):
     if expect is not None and not (isinstance(expect, str) and consts.DIGEST_RE.fullmatch(expect)):
         raise ApError("bad_input", "expectCommandDigest")
 
-    # Pi trims the prompt and runs one that starts with / as a command, swallowing it.
-    if harness == "pi" and isinstance(prompt, str) and prompt.lstrip().startswith("/"):
+    # Pi trims the prompt and runs one that starts with / as a command, swallowing it. Pi's trim
+    # also drops a leading byte-order mark, which str.lstrip() keeps, so strip it before the test.
+    if harness == "pi" and isinstance(prompt, str) and re.sub(r"^[\s﻿]+", "", prompt).startswith("/"):
         raise ApError("pi_slash_prompt", "prompt")
 
     return {
