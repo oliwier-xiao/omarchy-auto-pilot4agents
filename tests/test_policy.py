@@ -267,7 +267,33 @@ def denylist_ranges():
     return begin, end
 
 
+# OpenCode's permission list turns every tool off first and then names the read-only tools that stay on
+# (edition.OPENCODE_READ_ONLY_TOOLS). These exact pairs are the one OpenCode place that value is written;
+# opencode_permission_problems() holds the whole list to that shape.
+_ON = '"al' + 'low"'
+OPENCODE_READ_ONLY_ALLOWS = (
+    ('"read":{"*":' + _ON + ',"*.env":"deny","*.env.*":"deny","*.env.example":' + _ON + ',"mcp:*":"deny"}',)
+    + tuple('"%s":%s' % (tool, _ON) for tool in edition.OPENCODE_READ_ONLY_TOOLS if tool != "read"))
+
+
+# The config OpenCode reads last may be set to one value only: the plugin's own read-only agent with the
+# level's rules (opencode_agent_problems). These are its exact openings in a built environment and the
+# README, in the `edition` answer (as the helper writes it, and re-encoded), and in the level table.
+_AGENT_HEAD = '{"agent":{"%s":' % edition.OPENCODE_READ_ONLY_AGENT
+OPENCODE_AGENT_CONFIG_SETS = (
+    "OPENCODE_CONFIG_" + "CONTENT=" + _AGENT_HEAD,
+    '"OPENCODE_CONFIG_' + 'CONTENT":"' + _AGENT_HEAD.replace('"', '\\"'),
+    '"OPENCODE_CONFIG_' + 'CONTENT": "' + _AGENT_HEAD.replace('"', '\\"'),
+    '"OPENCODE_CONFIG_' + 'CONTENT": _OPENCODE_READ_ONLY_CONFIG',
+)
+
+
 def denylist_hits(text):
+    for fragment in OPENCODE_READ_ONLY_ALLOWS:
+        # As written, and as it reads inside a JSON string (the `edition` answer).
+        text = text.replace(fragment, "").replace(fragment.replace('"', '\\"'), "")
+    for fragment in OPENCODE_AGENT_CONFIG_SETS:
+        text = text.replace(fragment, "")
     return [label for label, pattern in DENYLIST if pattern.search(text)]
 
 
@@ -295,6 +321,9 @@ def check_denylist():
         for number, line in enumerate(text.split("\n"), 1):
             if rel == SELF and begin <= number <= end:
                 continue
+            if rel == "README.md":
+                # The README names the variable in prose; only the flags block sets it, and that is checked.
+                line = line.replace("`OPENCODE_CONFIG_" + "CONTENT`", "")
             for label in denylist_hits(line):
                 if rel == GEMINI_POLICY and line == GEMINI_POLICY_ALLOW_LINE and label == "allow as a permission value":
                     continue
@@ -473,6 +502,53 @@ def argv_shape_problems(label, harness, exec_len, argv, env):
     return problems
 
 
+def opencode_permission_problems(permission):
+    """What is wrong with an OPENCODE_PERMISSION value: [] when it is a closed read-only list.
+
+    OpenCode asks only inside its own tools, so a tool a plugin or an MCP server adds runs unasked
+    unless "*" turns every tool off first. After that only the read-only tools may be back on, and
+    nothing may ask: a tool left to ask is still offered, with nobody there to answer.
+    """
+    rules = json.loads(permission)
+    problems = []
+    if not rules or next(iter(rules)) != "*" or rules["*"] != "deny":
+        problems.append('OPENCODE_PERMISSION does not start with "*":"deny"')
+    for key, value in rules.items():
+        actions = set(value.values()) if isinstance(value, dict) else {value}
+        if not actions <= {"allow", "deny"}:
+            problems.append("OPENCODE_PERMISSION leaves %s to ask" % key)
+        if "allow" in actions and key not in edition.OPENCODE_READ_ONLY_TOOLS:
+            problems.append("OPENCODE_PERMISSION turns %s on, which is not a read-only tool" % key)
+    for key in ("edit", "bash", "webfetch", "websearch", "task", "external_directory", "doom_loop"):
+        if rules.get(key) != "deny":
+            problems.append("OPENCODE_PERMISSION does not name %s as off" % key)
+    read = rules.get("read")
+    if not isinstance(read, dict) or list(read)[-1:] != ["mcp:*"] or read["mcp:*"] != "deny":
+        problems.append("OPENCODE_PERMISSION leaves MCP servers' resources readable")
+    return problems
+
+
+def opencode_agent_problems(entry):
+    """What is wrong with an OpenCode level entry: [] when it runs the plugin's own agent without plugins.
+
+    Rules an agent carries come after every global rule, so the agent your config sets up can turn a
+    tool back on. The run names the plugin's agent, defined in the config OpenCode reads last with
+    exactly the level's OPENCODE_PERMISSION and nothing else. A plugin's hooks run inside OpenCode,
+    outside every rule, so no plugin loads (--pure).
+    """
+    name = edition.OPENCODE_READ_ONLY_AGENT
+    argv, env = list(entry["argv"]), entry["env"]
+    problems = []
+    if "--pure" not in argv:
+        problems.append("runs without --pure, so plugins load")
+    if not any(argv[i:i + 2] == ["--agent", name] for i in range(len(argv))):
+        problems.append("does not run --agent %s" % name)
+    wanted = '{"agent":{"%s":{"mode":"primary","permission":%s}}}' % (name, env.get("OPENCODE_PERMISSION"))
+    if env.get("OPENCODE_CONFIG_" + "CONTENT") != wanted:
+        problems.append("OPENCODE_CONFIG_" + "CONTENT is not exactly the read-only agent with the level's rules")
+    return problems
+
+
 def check_denylist_generated_argv():
     """The level table, every argv the runner can build and the `edition` answer carry no denylisted value."""
     problems = []
@@ -484,12 +560,10 @@ def check_denylist_generated_argv():
                     problems.append("edition.LEVELS %s/%s: %s" % (level["id"], harness, label))
             permission = entry["env"].get("OPENCODE_PERMISSION")
             if permission is not None:
-                rules = json.loads(permission)
-                # A tool left to ask is still offered to the model and judged call by call, with
-                # nobody there to answer; only a tool that is off is never offered.
-                if any(v != "deny" for v in rules.values()):
-                    problems.append("edition.LEVELS %s/%s: OPENCODE_PERMISSION holds a value other than deny"
-                                    % (level["id"], harness))
+                problems += ["edition.LEVELS %s/%s: %s" % (level["id"], harness, p)
+                             for p in opencode_permission_problems(permission)]
+            if harness == "opencode":
+                problems += ["edition.LEVELS %s/opencode: %s" % (level["id"], p) for p in opencode_agent_problems(entry)]
     try:
         commands = generated_commands()
     except Exception as exc:  # the check must fail loudly, not pass on a broken builder
@@ -1128,6 +1202,32 @@ class PolicyCheckerSelfTests(unittest.TestCase):
                       "--force-color", "--trusted-root", '"approvalMode": "allowlist"', "auto-review is allowed",
                       "Cursor applies file edits headless only with --fo" + "rce, which Auto Pilot never passes."):
             self.assertEqual(denylist_hits(clean), [], clean)
+
+    def test_opencode_read_only_agent_checks_catch_planted_entries(self):
+        entry = edition.level("plan")["harness"]["opencode"]
+        self.assertEqual(opencode_agent_problems(entry), [])
+        self.assertEqual(opencode_permission_problems(entry["env"]["OPENCODE_PERMISSION"]), [])
+        name = edition.OPENCODE_READ_ONLY_AGENT
+        content = entry["env"]["OPENCODE_CONFIG_" + "CONTENT"]
+        # The variable is let through only as the opening of the read-only agent.
+        self.assertEqual(denylist_hits("OPENCODE_CONFIG_" + "CONTENT=" + content), [])
+        for sample in ("OPENCODE_CONFIG_" + 'CONTENT={"plugin":["x"]}',
+                       "OPENCODE_CONFIG_" + 'CONTENT={"agent":{"build":{}}}', "OPENCODE_CONFIG_" + "CONTENT"):
+            self.assertIn("opencode config-content variable", denylist_hits(sample), sample)
+        planted = (
+            dict(entry, argv=["--agent", name]),
+            dict(entry, argv=["--pure"]),
+            dict(entry, argv=["--pure", "--agent", "plan"]),
+            dict(entry, env=dict(entry["env"], **{"OPENCODE_CONFIG_" + "CONTENT": content.replace('"mode":"primary",',
+                                                                                                   '')})),
+            dict(entry, env=dict(entry["env"], **{"OPENCODE_CONFIG_" + "CONTENT": content[:-1] + ',"plugin":[]}'})),
+            dict(entry, env=dict(entry["env"], **{"OPENCODE_CONFIG_" + "CONTENT": content.replace(name, "build")})),
+            dict(entry, env={k: v for k, v in entry["env"].items() if k != "OPENCODE_CONFIG_" + "CONTENT"}),
+        )
+        for bad in planted:
+            self.assertNotEqual(opencode_agent_problems(bad), [], bad)
+        self.assertIn("OPENCODE_PERMISSION leaves MCP servers' resources readable",
+                      opencode_permission_problems(entry["env"]["OPENCODE_PERMISSION"].replace(',"mcp:*":"deny"', "")))
 
     def test_argv_shape_checker_catches_planted_argv(self):
         good = ["/usr/bin/pi", "--mode", "json", "--offline", "--tools", "read,grep,find,ls", "--provider", "openai-codex",

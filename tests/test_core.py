@@ -124,6 +124,10 @@ V2_MESSAGES = {
     "gemini_project_config": ("This folder has Gemini CLI settings that run commands at startup or widen the run (hooks, tool commands, a "
                               "sandbox, MCP servers, telemetry, agents or extra folders), or a .env, here or above it, that "
                               "redirects Gemini CLI. Gemini runs these before any policy, so no job runs here. Pick another folder."),
+    "opencode_zen_tools": ("OpenCode's free Zen models answer only a run that offers every tool, and this "
+                           "permission level turns tools off. Pick another model."),
+    "codex_mcp_config": ("Codex runs MCP servers outside its sandbox, and your Codex settings could not be "
+                         "read to turn them off for this job. Fix ~/.codex/config.toml first."),
 }
 CONTRACT_MESSAGES.update(V2_MESSAGES)
 V2_REASONS = {
@@ -146,6 +150,8 @@ V2_REASONS = {
     "opencode_plugin_code": "This folder has OpenCode plugin code that would run at startup, so nothing ran.",
     "codex_project_config": "This folder has its own Codex settings that could reach past the sandbox, so nothing ran.",
     "gemini_project_config": "This folder has Gemini CLI settings or a .env that would run code or redirect it at startup, so nothing ran.",
+    "opencode_zen_tools": "OpenCode's free Zen models need every tool on, which this permission level turns off, so nothing ran.",
+    "codex_mcp_config": "Your Codex settings could not be read to turn their MCP servers off, so nothing ran.",
 }
 
 
@@ -743,10 +749,25 @@ class DispatcherTests(Sandbox):
         self.assertEqual([lv["id"] for lv in obj["levels"]], ["plan", "unattended"])
         self.assertEqual(edition.LEVEL_IDS, ("plan", "unattended"))
         for lv in edition.LEVELS:
-            value = lv["harness"]["opencode"]["env"]["OPENCODE_PERMISSION"]
-            # Nothing is left to ask: a tool that asks is offered, and OpenCode does not ask before
-            # every command it runs (a cd with a redirection writes unasked).
-            self.assertEqual(set(json.loads(value).values()), {"deny"}, lv["id"])
+            rules = json.loads(lv["harness"]["opencode"]["env"]["OPENCODE_PERMISSION"])
+            # Every tool is off first, so one a plugin or an MCP server adds is never offered, and only
+            # the read-only tools come back. Nothing is left to ask: a tool that asks is offered, and
+            # OpenCode does not ask before every command it runs (a cd with a redirection writes unasked).
+            self.assertEqual((list(rules)[0], rules["*"]), ("*", "deny"), lv["id"])
+            for key, rule in rules.items():
+                actions = set(rule.values()) if isinstance(rule, dict) else {rule}
+                self.assertLessEqual(actions, {"allow", "deny"}, key)
+                if "allow" in actions:
+                    self.assertIn(key, edition.OPENCODE_READ_ONLY_TOOLS)
+            self.assertEqual(rules["read"]["mcp:*"], "deny", lv["id"])
+            # No plugin loads (its hooks run inside OpenCode, outside every rule), and the plugin's own
+            # agent runs, defined last with these same rules, so no agent your config sets up turns a
+            # tool back on.
+            entry = lv["harness"]["opencode"]
+            self.assertEqual(entry["argv"], ["--pure", "--agent", edition.OPENCODE_READ_ONLY_AGENT], lv["id"])
+            self.assertEqual(entry["env"]["OPENCODE_CONFIG_" + "CONTENT"],
+                             '{"agent":{"%s":{"mode":"primary","permission":%s}}}'
+                             % (edition.OPENCODE_READ_ONLY_AGENT, entry["env"]["OPENCODE_PERMISSION"]), lv["id"])
         with open(os.path.join(ROOT, "manifest.json")) as handle:
             manifest = json.load(handle)
         info = obj["edition"]
@@ -2100,7 +2121,8 @@ class V2CoreTests(Sandbox):
                   "paid_blocked": "allowPaid", "paid_zen": "allowPaid", "paid_opencode_claude": "allowPaid",
                   "paid_pi_claude": "allowPaid", "paid_pi_key": "allowPaid", "gemini_policy": "harness",
                   "opencode_plugin_code": "target.cwd", "codex_project_config": "target.cwd",
-                  "gemini_project_config": "target.cwd"}
+                  "gemini_project_config": "target.cwd", "opencode_zen_tools": "model",
+                  "codex_mcp_config": "harness"}
         self.assertEqual(set(fields), set(cli_core.GATE_CODES))
         for code, field in fields.items():
             detail = {"provider": "openrouter"} if code == "paid_pi_key" else None
