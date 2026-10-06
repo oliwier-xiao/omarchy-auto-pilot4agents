@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "oliwier.auto-pilot4agents",
   "name": "Auto Pilot 4 Agents",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "author": "oliwier-xiao",
   "license": "MIT",
   "description": "Prompt scheduler for AI coding agents: write prompts now and Auto Pilot sends each one later to a Claude Code, OpenCode, Codex, Gemini CLI, Cursor Agent or Pi session, in a few minutes, at a clock time, or right after a usage or rate limit resets. Scheduled jobs wait in a queue in the bar and run headless and unattended, even overnight, as cron-like systemd user timers, so your automation fires while the screen is locked.",

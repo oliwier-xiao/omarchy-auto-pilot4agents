@@ -462,8 +462,12 @@ class HarnessTests(Sandbox):
                 if name != "opencode":
                     self.assertNotIn("OPENCODE_PERMISSION", cmd["env"])
                 else:
-                    values = set(json.loads(cmd["env"]["OPENCODE_PERMISSION"]).values())
-                    self.assertEqual(values, {"deny"}, values)
+                    rules = json.loads(cmd["env"]["OPENCODE_PERMISSION"])
+                    self.assertEqual((list(rules)[0], rules["*"]), ("*", "deny"), rules)
+                    allowed = {k for k, v in rules.items()
+                               if "allow" in (set(v.values()) if isinstance(v, dict) else {v})}
+                    self.assertLessEqual(allowed, set(edition.OPENCODE_READ_ONLY_TOOLS), allowed)
+                    self.assertIn("--pure", cmd["argv"][start:end])
         self.assertEqual(edition.LEVEL_IDS, ("plan", "unattended"))
 
     def test_agent_env_allowlist(self):

@@ -267,7 +267,19 @@ def denylist_ranges():
     return begin, end
 
 
+# OpenCode's permission list turns every tool off first and then names the read-only tools that stay on
+# (edition.OPENCODE_READ_ONLY_TOOLS). These exact pairs are the one OpenCode place that value is written;
+# opencode_permission_problems() holds the whole list to that shape.
+_ON = '"al' + 'low"'
+OPENCODE_READ_ONLY_ALLOWS = (
+    ('"read":{"*":' + _ON + ',"*.env":"deny","*.env.*":"deny","*.env.example":' + _ON + '}',)
+    + tuple('"%s":%s' % (tool, _ON) for tool in edition.OPENCODE_READ_ONLY_TOOLS if tool != "read"))
+
+
 def denylist_hits(text):
+    for fragment in OPENCODE_READ_ONLY_ALLOWS:
+        # As written, and as it reads inside a JSON string (the `edition` answer).
+        text = text.replace(fragment, "").replace(fragment.replace('"', '\\"'), "")
     return [label for label, pattern in DENYLIST if pattern.search(text)]
 
 
@@ -473,6 +485,29 @@ def argv_shape_problems(label, harness, exec_len, argv, env):
     return problems
 
 
+def opencode_permission_problems(permission):
+    """What is wrong with an OPENCODE_PERMISSION value: [] when it is a closed read-only list.
+
+    OpenCode asks only inside its own tools, so a tool a plugin or an MCP server adds runs unasked
+    unless "*" turns every tool off first. After that only the read-only tools may be back on, and
+    nothing may ask: a tool left to ask is still offered, with nobody there to answer.
+    """
+    rules = json.loads(permission)
+    problems = []
+    if not rules or next(iter(rules)) != "*" or rules["*"] != "deny":
+        problems.append('OPENCODE_PERMISSION does not start with "*":"deny"')
+    for key, value in rules.items():
+        actions = set(value.values()) if isinstance(value, dict) else {value}
+        if not actions <= {"allow", "deny"}:
+            problems.append("OPENCODE_PERMISSION leaves %s to ask" % key)
+        if "allow" in actions and key not in edition.OPENCODE_READ_ONLY_TOOLS:
+            problems.append("OPENCODE_PERMISSION turns %s on, which is not a read-only tool" % key)
+    for key in ("edit", "bash", "webfetch", "websearch", "task", "external_directory", "doom_loop"):
+        if rules.get(key) != "deny":
+            problems.append("OPENCODE_PERMISSION does not name %s as off" % key)
+    return problems
+
+
 def check_denylist_generated_argv():
     """The level table, every argv the runner can build and the `edition` answer carry no denylisted value."""
     problems = []
@@ -484,12 +519,11 @@ def check_denylist_generated_argv():
                     problems.append("edition.LEVELS %s/%s: %s" % (level["id"], harness, label))
             permission = entry["env"].get("OPENCODE_PERMISSION")
             if permission is not None:
-                rules = json.loads(permission)
-                # A tool left to ask is still offered to the model and judged call by call, with
-                # nobody there to answer; only a tool that is off is never offered.
-                if any(v != "deny" for v in rules.values()):
-                    problems.append("edition.LEVELS %s/%s: OPENCODE_PERMISSION holds a value other than deny"
-                                    % (level["id"], harness))
+                problems += ["edition.LEVELS %s/%s: %s" % (level["id"], harness, p)
+                             for p in opencode_permission_problems(permission)]
+            if harness == "opencode" and "--pure" not in entry["argv"]:
+                # A plugin's hooks run inside OpenCode, outside every permission rule.
+                problems.append("edition.LEVELS %s/opencode: runs without --pure, so plugins load" % level["id"])
     try:
         commands = generated_commands()
     except Exception as exc:  # the check must fail loudly, not pass on a broken builder
