@@ -39,6 +39,12 @@ CLAUDE_PLAN_TOOLS = "Glob,Grep,Read"
 CLAUDE_UNATTENDED_TOOLS = "Bash,Edit,Glob,Grep,NotebookEdit,Read,WebFetch,WebSearch,Write"
 _CLAUDE_CONFIG_WRITES = "Write(~/.claude/**),Edit(~/.claude/**),Write(.claude/**),Edit(.claude/**)"
 
+# A folder's Gemini extensions and MCP servers run their own code when Gemini starts, outside the
+# approval policy. Naming only a sentinel that matches nothing enables no extension and allows no
+# MCP server, so none of a project's load. The admin policy (harness) still covers the tools.
+_GEMINI_NONE = "ap4a-none"
+_GEMINI_ISOLATION = ("--extensions", _GEMINI_NONE, "--allowed-mcp-server-names", _GEMINI_NONE)
+
 _OPENCODE_PLAN = ('{"edit":"deny","bash":"deny","webfetch":"deny","websearch":"deny",'
                   '"task":"deny","external_directory":"deny","doom_loop":"deny"}')
 # Unattended turns the same tools off as Plan rather than leaving them to ask. Nobody is there to
@@ -78,7 +84,7 @@ LEVELS = (
             },
             "gemini": {
                 "caption": "Plan mode. Gemini reads and plans. It does not edit files or run commands.",
-                "argv": ["--approval-mode", "plan"],
+                "argv": ["--approval-mode", "plan"] + list(_GEMINI_ISOLATION),
                 "env": {},
                 "initPermissionMode": None,
             },
@@ -129,8 +135,8 @@ LEVELS = (
                 "initPermissionMode": None,
             },
             "gemini": {
-                "caption": "Default approval. Tools that would ask are denied because nobody is there to answer.",
-                "argv": ["--approval-mode", "default"],
+                "caption": "Only Gemini's own read, search and look-up tools run. Edits, shell and anything a settings file adds are denied.",
+                "argv": ["--approval-mode", "default"] + list(_GEMINI_ISOLATION),
                 "env": {},
                 "initPermissionMode": None,
             },
