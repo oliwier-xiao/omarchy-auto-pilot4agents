@@ -71,6 +71,15 @@ _OPENCODE_READ_ONLY_ENV = {"OPENCODE_PERMISSION": _OPENCODE_READ_ONLY,
 # write where they like (oh-my-openagent keeps a .omo folder in the working folder), whatever the
 # rules above say about the model's tools.
 
+# Codex runs an MCP server's tools outside its sandbox, and calls one that says it only reads
+# (readOnlyHint) without asking even where nothing may be approved: on 0.160.0 such a tool wrote a file
+# outside the working folder of a read-only run. So at Plan and Unattended every MCP server in your Codex
+# settings is turned off by name (harness.codex_mcp_off; an empty mcp_servers table does not replace
+# yours), and so are ChatGPT apps and Codex plugins, which bring tools of their own. Plan also turns web
+# search off, as Plan does for every other agent.
+CODEX_MCP_OFF_LEVELS = ("plan", "unattended")
+_CODEX_EXTRAS_OFF = ["--disable", "apps", "--disable", "plugins"]
+
 # Closed enum. The helper refuses any level id that is not a key of this table,
 # whether it comes from stdin, jobs.json or IPC (R0 D8).
 LEVELS = (
@@ -96,8 +105,9 @@ LEVELS = (
                 "initPermissionMode": None,
             },
             "codex": {
-                "caption": "Read-only sandbox. Codex can read files but cannot write or reach the network.",
-                "argv": ["-s", "read-only"],
+                "caption": ("Read-only sandbox, with MCP servers, apps, plugins and web search off. Codex can read "
+                            "files but cannot write or reach the network."),
+                "argv": ["-s", "read-only"] + _CODEX_EXTRAS_OFF + ["-c", 'web_search="disabled"'],
                 "env": {},
                 "initPermissionMode": None,
             },
@@ -150,8 +160,9 @@ LEVELS = (
                 "initPermissionMode": None,
             },
             "codex": {
-                "caption": "Workspace-write sandbox. Codex can edit inside the working folder. Network stays off.",
-                "argv": ["-s", "workspace-write"],
+                "caption": ("Workspace-write sandbox, with MCP servers, apps and plugins off. Codex can edit inside "
+                            "the working folder. Network stays off."),
+                "argv": ["-s", "workspace-write"] + list(_CODEX_EXTRAS_OFF),
                 "env": {},
                 "initPermissionMode": None,
             },

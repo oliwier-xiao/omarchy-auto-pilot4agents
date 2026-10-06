@@ -126,6 +126,8 @@ V2_MESSAGES = {
                               "redirects Gemini CLI. Gemini runs these before any policy, so no job runs here. Pick another folder."),
     "opencode_zen_tools": ("OpenCode's free Zen models answer only a run that offers every tool, and this "
                            "permission level turns tools off. Pick another model."),
+    "codex_mcp_config": ("Codex runs MCP servers outside its sandbox, and your Codex settings could not be "
+                         "read to turn them off for this job. Fix ~/.codex/config.toml first."),
 }
 CONTRACT_MESSAGES.update(V2_MESSAGES)
 V2_REASONS = {
@@ -149,6 +151,7 @@ V2_REASONS = {
     "codex_project_config": "This folder has its own Codex settings that could reach past the sandbox, so nothing ran.",
     "gemini_project_config": "This folder has Gemini CLI settings or a .env that would run code or redirect it at startup, so nothing ran.",
     "opencode_zen_tools": "OpenCode's free Zen models need every tool on, which this permission level turns off, so nothing ran.",
+    "codex_mcp_config": "Your Codex settings could not be read to turn their MCP servers off, so nothing ran.",
 }
 
 
@@ -2118,7 +2121,8 @@ class V2CoreTests(Sandbox):
                   "paid_blocked": "allowPaid", "paid_zen": "allowPaid", "paid_opencode_claude": "allowPaid",
                   "paid_pi_claude": "allowPaid", "paid_pi_key": "allowPaid", "gemini_policy": "harness",
                   "opencode_plugin_code": "target.cwd", "codex_project_config": "target.cwd",
-                  "gemini_project_config": "target.cwd", "opencode_zen_tools": "model"}
+                  "gemini_project_config": "target.cwd", "opencode_zen_tools": "model",
+                  "codex_mcp_config": "harness"}
         self.assertEqual(set(fields), set(cli_core.GATE_CODES))
         for code, field in fields.items():
             detail = {"provider": "openrouter"} if code == "paid_pi_key" else None

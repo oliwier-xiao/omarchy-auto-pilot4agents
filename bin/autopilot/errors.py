@@ -87,6 +87,8 @@ MESSAGES = {
                               "redirects Gemini CLI. Gemini runs these before any policy, so no job runs here. Pick another folder."),
     "opencode_zen_tools": ("OpenCode's free Zen models answer only a run that offers every tool, and this "
                            "permission level turns tools off. Pick another model."),
+    "codex_mcp_config": ("Codex runs MCP servers outside its sandbox, and your Codex settings could not be "
+                         "read to turn them off for this job. Fix ~/.codex/config.toml first."),
 }
 
 DETAIL_KEYS = ("until", "partial", "fireAt", "status", "provider")

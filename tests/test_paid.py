@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import h5_support as S  # noqa: E402
 from h5_support import DAY, H5Case  # noqa: E402
-from autopilot import consts, fsio, harness, models, paid  # noqa: E402
+from autopilot import consts, edition, fsio, harness, models, paid  # noqa: E402
 from autopilot.errors import ApError  # noqa: E402
 
 V2_REASONS = set(consts.REASONS) | {
@@ -222,6 +222,21 @@ class ClaudeCodexGeminiTests(PaidCase):
         for info in ({"isUsingOverage": False}, {}, {"isUsingOverage": "true"}, {"isUsingOverage": 1}, None, []):
             self.assertIsNone(paid.claude_rate_event_verdict(info, False), info)
         self.assertIsNone(paid.claude_rate_event_verdict({"isUsingOverage": True}, True))
+
+    def test_codex_refused_below_auto_when_its_mcp_servers_cannot_be_known(self):
+        # Each MCP server in the Codex settings is turned off by name below Auto, so unreadable settings stop the job.
+        self.patch(harness, "_CODEX_SYSTEM_CONFIG", os.path.join(self.tmp, "etc-codex-config.toml"))
+        self.write(".codex/config.toml", "[mcp_servers\n")
+        for level in [lv["id"] for lv in edition.LEVELS if "codex" in lv["harness"]]:
+            for phase in ("preview", "arm", "prefire"):
+                code = self.gate(self.job("codex", level=level), phase=phase)["code"]
+                if level in edition.CODEX_MCP_OFF_LEVELS:
+                    self.assertEqual(code, "codex_mcp_config", (level, phase))
+                else:
+                    self.assertNotEqual(code, "codex_mcp_config", (level, phase))
+        self.write(".codex/config.toml", '[mcp_servers.context7]\ncommand = "npx"\n')
+        self.assertNotEqual(self.gate(self.job("codex"), phase="preview")["code"], "codex_mcp_config")
+        self.assertEqual(paid.REASON_FOR_CODE["codex_mcp_config"], "codex_mcp_config")
 
     def test_codex_login_lines_table(self):
         table = {
