@@ -144,6 +144,12 @@ def agent_env(harness, level_id):
         env["PATH"] = "/usr/bin:/bin:" + home + "/.local/bin"
     for key, value in per["env"].items():
         env[key] = value
+    if harness == "opencode":
+        # Project config is never loaded for a headless run: an opencode.json or a file under
+        # .opencode could redefine the agent, its permissions, its MCP servers or its tools and
+        # undo the level. The folder's own plugin code is refused separately (jobs.cwd_verdict),
+        # because this flag does not stop it.
+        env["OPENCODE_DISABLE_PROJECT_CONFIG"] = "1"
     return env
 
 

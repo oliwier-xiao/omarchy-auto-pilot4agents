@@ -46,7 +46,7 @@ REASON_FOR_CODE = {
     "cursor_autorun_config": "cursor_autorun_config", "cursor_network_config": "cursor_network_config",
     "cursor_project_rules": "cursor_project_rules", "cursor_untrusted": "untrusted",
     "harness_gated": "harness_gated", "not_logged_in": "not_logged_in", "pi_auth_invalid": "failed",
-    "gemini_policy": "gemini_policy",
+    "gemini_policy": "gemini_policy", "opencode_plugin_code": "opencode_plugin_code",
 }
 
 LEVEL = "plan"                        # probes run with the environment of the plan level
@@ -586,6 +586,31 @@ def opencode_project_config(cwd):
     return False
 
 
+def opencode_preflight(cwd):
+    """First OpenCode refusal for a working folder, or None.
+
+    OpenCode imports and runs every `.ts`/`.js` under a folder's `.opencode/plugin` or
+    `.opencode/plugins` the moment it starts, before any permission or level applies, and
+    OPENCODE_DISABLE_PROJECT_CONFIG does not stop it. So a folder whose tree, up to its repository
+    root, carries such plugin code is refused: an unattended run there would run that code. Config
+    that only redefines agents, permissions, MCP servers or tools is neutralised by the env flag,
+    not refused here. Stat and one scandir per folder; nothing is read or parsed.
+    """
+    path = _clean_abs(cwd, consts.CWD_MAX_BYTES)
+    if path is None:
+        return "opencode_plugin_code"
+    for folder in _walk_to_git_root(os.path.realpath(path)):
+        for name in ("plugin", "plugins"):
+            plugin_dir = os.path.join(folder, ".opencode", name)
+            try:
+                with os.scandir(plugin_dir) as it:
+                    if any(e.name.endswith((".ts", ".js", ".mjs", ".cjs")) for e in it):
+                        return "opencode_plugin_code"
+            except OSError:
+                continue
+    return None
+
+
 def opencode_verbose(exec_prefix, provider, deadline_s):
     """parse_verbose_blocks of `opencode models <provider> --verbose` (20 s, 1 MiB), or None."""
     if provider not in ("opencode", "opencode-go") or not _exec_ok(exec_prefix):
@@ -990,6 +1015,10 @@ def check_job(job, *, phase, now, usage, sd=None, exec_prefix=None, deadline_s=1
     # 2b. Gemini CLI: the admin policy that keeps a headless job in its approval mode must apply
     if code is None and harness_id == "gemini":
         code = gemini_policy_gate()
+
+    # 2c. OpenCode: a working folder whose tree carries plugin code runs it at start, before any level
+    if code is None and harness_id == "opencode":
+        code = opencode_preflight(cwd)
 
     # 3. sign-in probes (4. paid refusal is folded in where one answer decides both)
     login_kind = None

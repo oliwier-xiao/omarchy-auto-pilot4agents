@@ -106,7 +106,8 @@ DIAG_RE = re.compile(r"^ap4a: (E_NOT_SYSTEMD|STALE|PAUSED|NEEDS_CONFIRM|MISSED|S
                      r"E_INTERNAL) job=[0-9a-f]{16} gen=[0-9]+$")
 ALLOWED_ENV = {"HOME", "USER", "LOGNAME", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS", "XDG_CONFIG_HOME",
                "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME", "LANG", "NO_COLOR", "TERM", "PATH",
-               "OPENCODE_PERMISSION", "PI_OFFLINE", "PI_TELEMETRY", "PI_SKIP_VERSION_CHECK"}
+               "OPENCODE_PERMISSION", "OPENCODE_DISABLE_PROJECT_CONFIG",
+               "PI_OFFLINE", "PI_TELEMETRY", "PI_SKIP_VERSION_CHECK"}
 V1_HARNESSES = ("claude", "opencode", "codex", "gemini")
 CURSOR_UUID = "5b0a3c1e-7d2f-4a8b-9c6d-0e1f2a3b4c5d"
 PI_UUID = "01a0a56f-6db2-76b1-a858-8cc1c56c0a2f"
@@ -483,6 +484,7 @@ class HarnessTests(Sandbox):
                 self.assertEqual(env["XDG_RUNTIME_DIR"], self.runtime)
                 self.assertEqual(env["XDG_DATA_HOME"], self.home + "/.local/share")
                 self.assertEqual("OPENCODE_PERMISSION" in env, name == "opencode")
+                self.assertEqual(env.get("OPENCODE_DISABLE_PROJECT_CONFIG"), "1" if name == "opencode" else None)
         os.chmod(self.runtime, 0o755)
         self.assertNotIn("XDG_RUNTIME_DIR", harness.agent_env("claude", "plan"))
         with self.assertRaises(ApError):
@@ -2574,7 +2576,7 @@ class V2RunVerbTests(RunVerbBase):
                  "cursor_autorun_config": "cursor_autorun_config", "cursor_network_config": "cursor_network_config",
                  "cursor_project_rules": "cursor_project_rules", "cursor_untrusted": "untrusted",
                  "harness_gated": "harness_gated", "not_logged_in": "not_logged_in", "pi_auth_invalid": "failed",
-                 "gemini_policy": "gemini_policy"}
+                 "gemini_policy": "gemini_policy", "opencode_plugin_code": "opencode_plugin_code"}
         self.assertEqual(paid.REASON_FOR_CODE, table)
         for code, reason in table.items():
             job = self.seed(name="codex")

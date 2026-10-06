@@ -319,6 +319,30 @@ class OpenCodeTests(PaidCase):
         path = self.write(".cache/opencode/models.json", document, mtime=mtime)
         return path
 
+    def test_a_folder_with_opencode_plugin_code_is_refused(self):
+        # OpenCode imports .opencode/plugin/*.ts at startup, before any permission; so a working
+        # folder whose tree up to its git root carries such code runs it with nobody watching.
+        self.patch(fsio, "_check_ancestors", lambda parent, owners: None)
+        self.assertIsNone(paid.opencode_preflight(self.work))
+        self.assertIsNone(self.gate(self.job("opencode"))["code"])
+        for rel, hit in ((".opencode/plugin/evil.ts", True), (".opencode/plugins/x.js", True),
+                         (".opencode/plugin/README.md", False), (".opencode/tool/t.ts", False),
+                         ("opencode.json", False)):
+            path = os.path.join(self.work, rel)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            open(path, "w").close()
+            self.assertEqual(paid.opencode_preflight(self.work) == "opencode_plugin_code", hit, rel)
+            os.remove(path)
+        # Found in a parent up to the repository root, too.
+        os.makedirs(os.path.join(self.work, ".git"), exist_ok=True)
+        deep = self.mkdir("proj/a/b")
+        os.makedirs(os.path.join(self.work, ".opencode", "plugin"), exist_ok=True)
+        open(os.path.join(self.work, ".opencode", "plugin", "p.ts"), "w").close()
+        self.assertEqual(paid.opencode_preflight(deep), "opencode_plugin_code")
+        g = self.gate(self.job("opencode", target={"mode": "new", "cwd": deep, "sessionId": None,
+                                                    "sessionPath": None}))
+        self.assertEqual(g["code"], "opencode_plugin_code")
+
     def test_opencode_verbose_parser_7_free_fixture(self):
         text = S.verbose_text(S.seven_free_blocks())
         parsed = paid.parse_verbose_blocks(text)

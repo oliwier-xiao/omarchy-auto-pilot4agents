@@ -24,8 +24,11 @@ HARNESS_IDS = ("claude", "opencode", "codex", "cursor", "pi", "gemini")
 
 _OPENCODE_PLAN = ('{"edit":"deny","bash":"deny","webfetch":"deny","websearch":"deny",'
                   '"task":"deny","external_directory":"deny","doom_loop":"deny"}')
-_OPENCODE_UNATTENDED = ('{"edit":"ask","bash":"ask","webfetch":"ask","websearch":"ask",'
-                        '"task":"ask","external_directory":"deny","doom_loop":"deny"}')
+# Unattended turns the same tools off as Plan rather than leaving them to ask. Nobody is there to
+# answer either way, but a tool that is off is never offered to the model, while one left to ask
+# is offered and checked call by call, which OpenCode does not do for every command.
+_OPENCODE_UNATTENDED = ('{"edit":"deny","bash":"deny","webfetch":"deny","websearch":"deny",'
+                        '"task":"deny","external_directory":"deny","doom_loop":"deny"}')
 
 # Closed enum. The helper refuses any level id that is not a key of this table,
 # whether it comes from stdin, jobs.json or IPC (R0 D8).
@@ -95,7 +98,7 @@ LEVELS = (
                 "initPermissionMode": "dontAsk",
             },
             "opencode": {
-                "caption": "Edits, shell, web and subagents would ask, so they are rejected. Reads still work.",
+                "caption": "Edits, shell, web and subagents are off, since nobody is there to approve them. Reads still work.",
                 "argv": [],
                 "env": {"OPENCODE_PERMISSION": _OPENCODE_UNATTENDED},
                 "initPermissionMode": None,

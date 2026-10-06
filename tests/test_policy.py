@@ -432,8 +432,10 @@ def check_denylist_generated_argv():
             permission = entry["env"].get("OPENCODE_PERMISSION")
             if permission is not None:
                 rules = json.loads(permission)
-                if any(v not in ("deny", "ask") for v in rules.values()):
-                    problems.append("edition.LEVELS %s/%s: OPENCODE_PERMISSION holds a value other than deny/ask"
+                # A tool left to ask is still offered to the model and judged call by call, with
+                # nobody there to answer; only a tool that is off is never offered.
+                if any(v != "deny" for v in rules.values()):
+                    problems.append("edition.LEVELS %s/%s: OPENCODE_PERMISSION holds a value other than deny"
                                     % (level["id"], harness))
     try:
         commands = generated_commands()
