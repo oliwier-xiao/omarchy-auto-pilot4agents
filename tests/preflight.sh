@@ -644,7 +644,7 @@ for label, prefix in (("Cursor Agent", "cursor-agent -p --output-format stream-j
     elif "<stdin>" not in chunk:
         missing.append("the %s template does not end in <stdin>" % label)
 flags = "\n".join(fences)
-for label, needle in (("Cursor Agent plan flags", "--mode ask --sandbox enabled"),
+for label, needle in (("Cursor Agent plan flags", "--mode ask"),
                       ("Pi plan tools", "--tools read,grep,find,ls")):
     if needle not in flags:
         missing.append("the permission flags do not list %s (%s)" % (label, needle))

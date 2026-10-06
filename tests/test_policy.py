@@ -380,6 +380,10 @@ VALUE_FLAGS = {
     "cursor": ("--output-format", "--mode", "--sandbox", "--workspace", "--model", "--resume"),
     "pi": ("--mode", "--tools", "--provider", "--model", "--session-id", "--name", "--session", "--fork"),
 }
+# The only tools a Claude level may name: Plan reads, Unattended also the tools a user's own allow rules
+# can open. Anything permission-free (subagents, worktrees, triggers) stays out at both.
+CLAUDE_TOOLS = {"plan": ("Glob", "Grep", "Read"),
+                "unattended": ("Bash", "Edit", "Glob", "Grep", "NotebookEdit", "Read", "WebFetch", "WebSearch", "Write")}
 
 
 def argv_shape_problems(label, harness, exec_len, argv, env):
@@ -392,10 +396,11 @@ def argv_shape_problems(label, harness, exec_len, argv, env):
             problems.append("build_command %s: forbidden argument %s" % (label, word))
     for i, word in enumerate(words):
         if word == "--tools":
+            tools = CLAUDE_TOOLS.get(label.split("/")[0], ()) if harness == "claude" else consts.PI_TOOLS
             members = words[i + 1].split(",") if i + 1 < len(words) else []
-            outside = [m for m in members if m not in consts.PI_TOOLS]
+            outside = [m for m in members if m not in tools]
             if not members or outside:
-                problems.append("build_command %s: --tools outside %s: %s" % (label, ",".join(consts.PI_TOOLS), outside))
+                problems.append("build_command %s: --tools outside %s: %s" % (label, ",".join(tools), outside))
     if SYNTHETIC_PROMPT in " ".join(argv) or any(SYNTHETIC_PROMPT in str(v) for v in env.values()):
         problems.append("build_command %s: the job's prompt or label reached argv or env" % label)
     if harness in VALUE_FLAGS:
@@ -432,8 +437,10 @@ def check_denylist_generated_argv():
             permission = entry["env"].get("OPENCODE_PERMISSION")
             if permission is not None:
                 rules = json.loads(permission)
-                if any(v not in ("deny", "ask") for v in rules.values()):
-                    problems.append("edition.LEVELS %s/%s: OPENCODE_PERMISSION holds a value other than deny/ask"
+                # A tool left to ask is still offered to the model and judged call by call, with
+                # nobody there to answer; only a tool that is off is never offered.
+                if any(v != "deny" for v in rules.values()):
+                    problems.append("edition.LEVELS %s/%s: OPENCODE_PERMISSION holds a value other than deny"
                                     % (level["id"], harness))
     try:
         commands = generated_commands()
